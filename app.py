@@ -2,12 +2,13 @@ from flask import Flask, redirect, request, session, jsonify, url_for
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
-import librosa
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import requests
-from io import BytesIO
+import time
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -22,6 +23,21 @@ os.environ['SPOTIPY_CLIENT_SECRET'] = SPOTIPY_CLIENT_SECRET
 os.environ['SPOTIPY_REDIRECT_URI'] = SPOTIPY_REDIRECT_URI
 
 sp_oauth = SpotifyOAuth(scope="playlist-read-private user-library-read")
+
+def get_audio_features_with_retries(sp, track_id, max_retries=2, backoff_factor=1):
+    for retry in range(max_retries):
+        try:
+            audio_features = sp.audio_features(track_id)[0]
+            return audio_features
+        except spotipy.exceptions.SpotifyException as e:
+            if e.http_status == 429:
+                retry_after = int(e.headers.get('Retry-After', backoff_factor * (2 ** retry)))
+                logger.warning(f"Rate limited. Retrying in {retry_after} seconds...")
+                time.sleep(retry_after)
+            else:
+                logger.error(f"Failed to fetch audio features for track ID {track_id}: {e}")
+                raise
+    raise Exception("Max retries exceeded")
 
 @app.route('/')
 def login():
@@ -49,7 +65,10 @@ def get_track():
         'hip-hop': '02okEcUQXHe2sS5ajE9XG0',
         'country': '2Hi4RV1DJHHiSDcwYFFKeR',
         'metal': '1yMlpNGEpIVUIilZlrbdS0',
-        'classical': '2AIyLES2xJfPa6EOxmKySl'
+        'classical': '2AIyLES2xJfPa6EOxmKySl',
+        'jazz': '6ylvGA8NeX2CuaeGtwHWDJ',
+        'electronic': '2e3dcRuo9uDH6qD3NOGKAL',
+        'rap': '041EEjr8FMkWlzbuKnSXYD'
     }
     
     tracks_data = []
@@ -62,8 +81,12 @@ def get_track():
             track_name = track['name']
             artist_name = track['artists'][0]['name']
             
-            # Get audio features
-            audio_features = sp.audio_features(track_id)[0]
+            # Get audio features with retries
+            try:
+                audio_features = get_audio_features_with_retries(sp, track_id)
+            except Exception as e:
+                logger.error(f"Skipping track ID {track_id} due to errors: {e}")
+                continue
             
             track_data = {
                 'genre': genre,
@@ -84,6 +107,7 @@ def get_track():
                 'valence': audio_features['valence']
             }
             tracks_data.append(track_data)
+    
     df = pd.DataFrame(tracks_data)
     df.to_csv('tracks_data.csv', index=False)
     
