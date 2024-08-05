@@ -14,8 +14,8 @@ app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
 
-SPOTIPY_CLIENT_ID = '341c614a04474ed9a70cb5abc52a012f'
-SPOTIPY_CLIENT_SECRET = '311a0ae34c084496863bed3e8e396de6'
+SPOTIPY_CLIENT_ID = 'PUT YOUR SPOTIFY CLIENT ID HERE'
+SPOTIPY_CLIENT_SECRET = 'PUT YOUR SPOTIFY CLIENT SCRET HERE'
 SPOTIPY_REDIRECT_URI = 'http://localhost:8888/callback'
 
 os.environ['SPOTIPY_CLIENT_ID'] = SPOTIPY_CLIENT_ID
@@ -24,23 +24,20 @@ os.environ['SPOTIPY_REDIRECT_URI'] = SPOTIPY_REDIRECT_URI
 
 sp_oauth = SpotifyOAuth(scope="playlist-read-private user-library-read")
 
-def get_audio_features_with_retries(sp, track_id, max_retries=10, base_sleep_time=1):
-    retries = 0
-    while retries < max_retries:
+def get_audio_features_with_retries(sp, track_id, max_retries=2, backoff_factor=1):
+    for retry in range(max_retries):
         try:
             audio_features = sp.audio_features(track_id)[0]
             return audio_features
         except spotipy.exceptions.SpotifyException as e:
             if e.http_status == 429:
-                retry_after = int(e.headers.get('Retry-After', base_sleep_time * (2 ** retries)))
-                logger.warning(f"Rate limited. Retrying in {retry_after} seconds... (Retry {retries + 1}/{max_retries})")
+                retry_after = int(e.headers.get('Retry-After', backoff_factor * (2 ** retry)))
+                logger.warning(f"Rate limited. Retrying in {retry_after} seconds...")
                 time.sleep(retry_after)
-                retries += 1
             else:
                 logger.error(f"Failed to fetch audio features for track ID {track_id}: {e}")
-                break
-    logger.error(f"Max retries exceeded for track ID {track_id}")
-    return None
+                raise
+    raise Exception("Max retries exceeded")
 
 @app.route('/')
 def login():
@@ -85,9 +82,10 @@ def get_track():
             artist_name = track['artists'][0]['name']
             
             # Get audio features with retries
-            audio_features = get_audio_features_with_retries(sp, track_id)
-            if not audio_features:
-                logger.error(f"Skipping track ID {track_id} due to errors")
+            try:
+                audio_features = get_audio_features_with_retries(sp, track_id)
+            except Exception as e:
+                logger.error(f"Skipping track ID {track_id} due to errors: {e}")
                 continue
             
             track_data = {
@@ -109,8 +107,6 @@ def get_track():
                 'valence': audio_features['valence']
             }
             tracks_data.append(track_data)
-            # Add a delay between requests to manage rate limit
-            time.sleep(1)  # Sleep for 1 second between requests
     
     df = pd.DataFrame(tracks_data)
     df.to_csv('tracks_data.csv', index=False)
@@ -119,3 +115,4 @@ def get_track():
 
 if __name__ == '__main__':
     app.run(port=8888)
+    
