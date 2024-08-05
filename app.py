@@ -2,13 +2,12 @@ from flask import Flask, redirect, request, session, jsonify, url_for
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
+import librosa
+import numpy as np
 import pandas as pd
-import time
-import logging
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import matplotlib.pyplot as plt
+import requests
+from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -24,6 +23,7 @@ os.environ['SPOTIPY_REDIRECT_URI'] = SPOTIPY_REDIRECT_URI
 
 sp_oauth = SpotifyOAuth(scope="playlist-read-private user-library-read")
 
+<<<<<<< HEAD
 def get_audio_features_with_retries(sp, track_id, max_retries=10, base_sleep_time=1):
     retries = 0
     while retries < max_retries:
@@ -42,6 +42,8 @@ def get_audio_features_with_retries(sp, track_id, max_retries=10, base_sleep_tim
     logger.error(f"Max retries exceeded for track ID {track_id}")
     return None
 
+=======
+>>>>>>> parent of 3176ba3 (Added in more genres to data scraper)
 @app.route('/')
 def login():
     auth_url = sp_oauth.get_authorize_url()
@@ -68,10 +70,7 @@ def get_track():
         'hip-hop': '02okEcUQXHe2sS5ajE9XG0',
         'country': '2Hi4RV1DJHHiSDcwYFFKeR',
         'metal': '1yMlpNGEpIVUIilZlrbdS0',
-        'classical': '2AIyLES2xJfPa6EOxmKySl',
-        'jazz': '6ylvGA8NeX2CuaeGtwHWDJ',
-        'electronic': '2e3dcRuo9uDH6qD3NOGKAL',
-        'rap': '041EEjr8FMkWlzbuKnSXYD'
+        'classical': '2AIyLES2xJfPa6EOxmKySl'
     }
     
     tracks_data = []
@@ -84,11 +83,16 @@ def get_track():
             track_name = track['name']
             artist_name = track['artists'][0]['name']
             
+<<<<<<< HEAD
             # Get audio features with retries
             audio_features = get_audio_features_with_retries(sp, track_id)
             if not audio_features:
                 logger.error(f"Skipping track ID {track_id} due to errors")
                 continue
+=======
+            # Get audio features
+            audio_features = sp.audio_features(track_id)[0]
+>>>>>>> parent of 3176ba3 (Added in more genres to data scraper)
             
             track_data = {
                 'genre': genre,
@@ -109,9 +113,12 @@ def get_track():
                 'valence': audio_features['valence']
             }
             tracks_data.append(track_data)
+<<<<<<< HEAD
             # Add a delay between requests to manage rate limit
             time.sleep(1)  # Sleep for 1 second between requests
     
+=======
+>>>>>>> parent of 3176ba3 (Added in more genres to data scraper)
     df = pd.DataFrame(tracks_data)
     df.to_csv('tracks_data.csv', index=False)
     
